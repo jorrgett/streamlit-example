@@ -1,38 +1,65 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
 import streamlit as st
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+from PIL import Image
+from werkzeug.utils import secure_filename
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+import json
 
-"""
-# Welcome to Streamlit!
+st.set_page_config(page_title="Tumor Detection", page_icon=":microscope:", layout="wide")
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+model = keras.models.load_model("./models/classification.h5")
+classes = ['Ningún Tumor', 'Tumor Pituitario', 'Tumor Meningioma', 'Tumor Glioma']
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+def names(number):
+    if (number == 0):
+        return classes[0]
+    elif (number == 1):
+        return classes[1]
+    elif (number == 2):
+        return classes[2]
+    elif (number == 3):
+        return classes[3]
 
-    Point = namedtuple('Point', 'x y')
-    data = []
 
-    points_per_turn = total_points / num_turns
+def upload_image(file):
+    cloudinary.config(
+        cloud_name="brainlypf",
+        api_key="143982914773545",
+        api_secret="Qt7iifjrFNj2-rFkrn9dssdYaME"
+    )
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
+    upload_data = cloudinary.uploader.upload(file)
+    image_url = upload_data['secure_url']
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+    return image_url
+
+
+def predict(image):
+    dim = (150, 150)
+    x = np.array(image.resize(dim))
+    x = x.reshape(1, 150, 150, 3)
+    answ = model.predict_on_batch(x)
+    classification = np.where(answ == np.amax(answ))[1][0]
+    return names(classification) + ' Detectado'
+
+
+def main():
+    st.title("Detección de tumores cerebrales")
+
+    uploaded_file = st.file_uploader("Cargue una imagen de tomografía computarizada o resonancia magnética", type=["jpg", "jpeg", "png"])
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption='Imagen cargada', use_column_width=True)
+        st.write("")
+        st.write("Predicción:")
+        result = predict(image)
+        st.write(result)
+
+
+if __name__ == '__main__':
+    main()
